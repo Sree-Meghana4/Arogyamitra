@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login | Health AI</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+  <div class="theme-toggle-fixed">
+    <button id="theme-toggle" aria-label="Switch to dark mode" class="theme-toggle">
+      <span id="theme-toggle-icon">🌙</span>
+    </button>
+  </div>
+  <div class="center-form">
+    <form class="auth-form" method="POST" autocomplete="off">
+      <h2>Login</h2>
+      {% if error %}<div class="form-error" role="alert">{{ error }}</div>{% endif %}
+      <label for="email" class="visually-hidden">Email</label>
+      <input id="email" type="email" name="email" placeholder="Email" required autocomplete="username"/>
+      <label for="password" class="visually-hidden">Password</label>
+      <input id="password" type="password" name="password" placeholder="Password" required autocomplete="current-password"/>
+      <button type="submit">Login</button>
+      <div class="form-footer">
+        Don't have an account? <a href="/register">Sign up</a>
+      </div>
+    </form>
+  </div>
+  <script src="/static/theme-toggle.js" defer></script>
+</body>
+</html>
