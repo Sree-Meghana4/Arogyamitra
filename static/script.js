@@ -7,8 +7,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatBox = document.getElementById('chat-box');
   const langSelector = document.getElementById('lang-selector');
   const micBtn = document.getElementById('mic-btn');
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+  const clearBtn = document.getElementById('clear-voice-btn');
+  const inputWrapper = userInput.parentElement;
+  const inputError = document.getElementById('input-error');
+  let recognition = null;
+  let isListening = false;
 
-  if (!chatForm || !userInput || !sendBtn || !chatBox || !langSelector || !micBtn) {
+  if (!chatForm || !userInput || !sendBtn || !chatBox || !langSelector || !micBtn || !sidebarToggle || !sidebar || !clearBtn || !inputWrapper || !inputError) {
     console.error("❌ Missing one or more elements.");
     return;
   }
@@ -53,33 +61,104 @@ document.addEventListener('DOMContentLoaded', () => {
     sendBtn.disabled = false;
   });
 
+  // Show/hide clear button
+  userInput.addEventListener('input', () => {
+    if (userInput.value.trim()) {
+      inputWrapper.classList.add('has-text');
+    } else {
+      inputWrapper.classList.remove('has-text');
+    }
+    inputError.textContent = '';
+  });
+
+  // Clear input
+  clearBtn.addEventListener('click', () => {
+    userInput.value = '';
+    inputWrapper.classList.remove('has-text');
+    inputError.textContent = '';
+    userInput.focus();
+  });
+
+  // Voice input logic
+  const stopBtn = document.getElementById('stop-voice-btn');
+  if (sidebarToggle && sidebar) {
+    sidebarToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('closed');
+    });
+  }
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      sidebarOverlay.style.display = 'none';
+    });
+  }
+
   micBtn.addEventListener('click', () => {
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    if (isListening) {
+      recognition && recognition.abort();
+      setMicInactive();
+      stopBtn.style.display = 'none';
+      inputError.textContent = 'Voice input cancelled.';
+      return;
+    }
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      inputError.textContent = "Voice input not supported in this browser.";
+      return;
+    }
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
     recognition.lang = mapLangToLocale(langSelector.value);
     recognition.interimResults = false;
 
     recognition.onstart = () => {
-      micBtn.innerText = "🎙️ Listening...";
+      setMicActive();
+      stopBtn.style.display = 'inline-flex';
+      inputError.textContent = '';
     };
 
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       userInput.value = transcript;
-      micBtn.innerText = "🎤";
+      inputWrapper.classList.add('has-text');
+      setMicInactive();
+      stopBtn.style.display = 'none';
     };
 
     recognition.onerror = (err) => {
-      console.error("🎤 Voice error:", err);
-      alert("Voice input error: " + err.error);
-      micBtn.innerText = "🎤";
+      setMicInactive();
+      stopBtn.style.display = 'none';
+      if (err.error === 'aborted' || err.error === 'no-speech') {
+        inputError.textContent = "Voice input cancelled.";
+      } else {
+        inputError.textContent = "Voice input error: " + err.error;
+      }
     };
 
     recognition.onend = () => {
-      micBtn.innerText = "🎤";
+      setMicInactive();
+      stopBtn.style.display = 'none';
     };
 
     recognition.start();
   });
+
+  stopBtn.addEventListener('click', () => {
+    if (recognition && isListening) {
+      recognition.stop();
+      setMicInactive();
+      stopBtn.style.display = 'none';
+    }
+  });
+
+  function setMicActive() {
+    micBtn.classList.add('listening');
+    micBtn.innerText = "🎙️";
+    isListening = true;
+  }
+  function setMicInactive() {
+    micBtn.classList.remove('listening');
+    micBtn.innerText = "🎤";
+    isListening = false;
+  }
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -112,6 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
       chatBox.appendChild(botMessage);
     }
 
+    updateChatBoxAlignment();
     scrollToBottom();
   }
 
@@ -127,10 +207,24 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
     chatBox.appendChild(typingMessage);
+    updateChatBoxAlignment();
     scrollToBottom();
   }
 
+  function updateChatBoxAlignment() {
+    if (!chatBox) return;
+    if (chatBox.querySelector('.message')) {
+      chatBox.classList.add('has-messages');
+    } else {
+      chatBox.classList.remove('has-messages');
+    }
+  }
+
   function speakText(text, lang) {
+    if (!('speechSynthesis' in window)) {
+      console.warn("🗣️ Speech Synthesis not supported.");
+      return;
+    }
     try {
       const utterance = new SpeechSynthesisUtterance(text.replace(/<br>/g, ' '));
       utterance.lang = mapLangToLocale(lang || 'en');

@@ -8,18 +8,23 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <div class="theme-toggle-fixed">
+    <button id="theme-toggle" aria-label="Switch to dark mode" class="theme-toggle">
+      <span id="theme-toggle-icon">🌙</span>
+    </button>
+  </div>
   <div class="app-container">
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
+      <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar" tabindex="0">
+        <!-- Hamburger icon -->
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
       <div class="sidebar-header">
-        <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar" tabindex="0">
-          <!-- Hamburger icon -->
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
-        </button>
         <div class="sidebar-title">
           <span class="sidebar-logo">🩺</span>
           <span class="sidebar-text">Health AI</span>
@@ -47,13 +52,8 @@
           </li>
         </ul>
       </nav>
-      <div class="sidebar-footer">
-        <button id="theme-toggle" aria-label="Switch to dark mode" class="theme-toggle" tabindex="0">
-          <span id="theme-toggle-icon">🌙</span>
-          <span class="nav-text">Theme</span>
-        </button>
-      </div>
     </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
     <!-- Chat UI -->
     <main class="chat-area" role="main">
       <div class="chat-wrapper">
@@ -66,7 +66,7 @@
             </div>
           </div>
           <form class="chat-input-container" id="chat-form" autocomplete="off">
-            <div class="input-wrapper">
+            <div class="input-wrapper" style="position:relative;">
               <label for="lang-selector" class="visually-hidden">Select language</label>
               <select id="lang-selector" title="Choose language" aria-label="Language selector">
                 <option value="en" lang="en">English</option>
@@ -81,7 +81,9 @@
                 <option value="gu" lang="gu">Gujarati</option>
               </select>
               <input type="text" id="user-input" placeholder="Ask your health question..." aria-label="User input" required autocomplete="off" />
+              <button type="button" id="clear-voice-btn" aria-label="Clear input">&times;</button>
               <button type="button" id="mic-btn" aria-label="Voice input" tabindex="0">🎤</button>
+              <button type="button" id="stop-voice-btn" aria-label="Stop voice input" style="display:none;">⏹️</button>
               <button id="send-btn" type="submit" aria-label="Send" tabindex="0">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -89,6 +91,7 @@
                 </svg>
               </button>
             </div>
+            <div class="input-error" id="input-error"></div>
             <div class="input-footer">
               <span>Powered by Gemini &amp; LibreTranslate</span>
             </div>

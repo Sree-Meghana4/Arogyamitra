@@ -4,8 +4,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
+import logging
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "your_secret_key")
@@ -18,26 +21,28 @@ APP_PASSWORD = os.getenv("APP_PASSWORD")
 # System prompt for Gemini
 SYSTEM_PROMPT = {
     "role": "user",
-        "parts": [{"text": (
-            "You are a multilingual medical assistant. Respond to symptoms and health concerns in this exact format.\n\n"
-            "Do not skip sections, and respond in the user's language. Each section should have exactly 2 lines, with 1 blank line between sections.\n"
-            "DO NOT use markdown formatting.\n\n"
-            "🛑 Omit the 'Nearby Help' section.\n\n"
-            "FORMAT:\n\n"
-            "🏪 Health Issue Classification:\n"
-            "Line 1: Risk level - LOW / MEDIUM / HIGH / EMERGENCY.\n"
-            "Line 2: If HIGH or EMERGENCY, say: ⚠ EMERGENCY. Visit a hospital immediately. An alert email has been sent.\n\n"
-            "🧠 Description:\n"
-            "Line 1: Summarize their issue in plain terms.\n"
-            "Line 2: Mention the body system possibly affected.\n\n"
-            "✅ Precautions:\n"
-            "Line 1: A quick home remedy or first step.\n"
-            "Line 2: A second practical precaution.\n\n"
-            "💊 Medicines:\n"
-            "Line 1: Suggest OTC (over-the-counter) medicines like paracetamol, antacids, etc.\n"
-            "Line 2: Mention brand names if applicable, but remind to read dosage instructions carefully.\n\n"
-            "If the user just says 'hello', greet them kindly and do NOT use this format."
-        )}]
+    "parts": [{"text": (
+        "You are a multilingual medical assistant. Respond to symptoms and health concerns in this exact format.\n\n"
+        "If the user's input is vague, incomplete, or you need more information to make a better assessment, ask ONE relevant follow-up question as a doctor would, before giving your formatted response. If the user's input is clear and detailed, do NOT ask a follow-up question. Never ask more than one follow-up in a row.\n\n"
+        "The follow-up question should be in the user's language and should be specific (e.g., 'How long have you had this symptom?', 'Do you have a fever?', etc.).\n\n"
+        "Do not skip sections, and respond in the user's language. Each section should have exactly 2 lines, with 1 blank line between sections.\n"
+        "DO NOT use markdown formatting.\n\n"
+        "🛑 Omit the 'Nearby Help' section.\n\n"
+        "FORMAT:\n\n"
+        "🏪 Health Issue Classification:\n"
+        "Line 1: Risk level - LOW / MEDIUM / HIGH / EMERGENCY.\n"
+        "Line 2: If HIGH or EMERGENCY, say: ⚠ EMERGENCY. Visit a hospital immediately. An alert email has been sent.\n\n"
+        "🧠 Description:\n"
+        "Line 1: Summarize their issue in plain terms.\n"
+        "Line 2: Mention the body system possibly affected.\n\n"
+        "✅ Precautions:\n"
+        "Line 1: A quick home remedy or first step.\n"
+        "Line 2: A second practical precaution.\n\n"
+        "💊 Medicines:\n"
+        "Line 1: Suggest OTC (over-the-counter) medicines like paracetamol, antacids, etc.\n"
+        "Line 2: Mention brand names if applicable, but remind to read dosage instructions carefully.\n\n"
+        "If the user just says 'hello', greet them kindly and do NOT use this format."
+    )}]
 }
 # Language-wise email templates
 EMAIL_TEMPLATES = {
@@ -138,8 +143,8 @@ def chat():
     reply = process_multilingual_query(user_message, lang_code)
     reply_html = reply.replace("\n", "<br>")
 
-    # Trigger email if it's a HIGH risk emergency
-    if "HIGH" in reply and "EMERGENCY" in reply:
+    # Improved emergency detection
+    if ("Risk level - HIGH" in reply or "Risk level - EMERGENCY" in reply):
         send_email(session['user_email'], session['user_name'], lang_code)
 
     return jsonify({"reply": reply_html, "reply_lang": lang_code})
@@ -161,7 +166,18 @@ def process_multilingual_query(user_text, lang_code):
     except:
         return "⚠️ Translation failed."
 
-    reply = ask_gemini([{"role": "user", "content": translated_query}])
+    # Add a flag to the conversation to prevent repeated follow-ups
+    conversation = [{"role": "user", "content": translated_query}]
+    if session.get("last_bot_followup"):
+        conversation.append({"role": "system", "content": "The user has already been asked a follow-up question. Do not ask another. Provide your full formatted response now."})
+        session["last_bot_followup"] = False
+    reply = ask_gemini(conversation)
+
+    # Detect if the bot is asking a follow-up
+    if "?" in reply and ("please provide" in reply.lower() or "can you tell" in reply.lower() or "more details" in reply.lower()):
+        session["last_bot_followup"] = True
+    else:
+        session["last_bot_followup"] = False
 
     try:
         translated_response = GoogleTranslator(source='en', target=lang_code).translate(reply)
@@ -177,8 +193,8 @@ def ask_gemini(conversation):
     }
     payload = {
         "contents": [
-            {"role": "user", "parts": [{"text": SYSTEM_PROMPT}]}
-        ] + [
+    SYSTEM_PROMPT
+     ] + [
             {"role": msg.get("role", "user"), "parts": [{"text": msg.get("content", "")}]} for msg in conversation
         ]
     }
@@ -196,9 +212,14 @@ def ask_gemini(conversation):
 
 def send_email(to_email, name, lang_code):
     if not SENDER_EMAIL or not APP_PASSWORD:
+        logging.error("Email credentials not set.")
         return
 
-    template = EMAIL_TEMPLATES.get(lang_code, EMAIL_TEMPLATES["en"])
+    logging.info(f"Requested email language: {lang_code}")
+    template = EMAIL_TEMPLATES.get(lang_code)
+    if not template:
+        logging.warning(f"No template for lang_code '{lang_code}', defaulting to English.")
+        template = EMAIL_TEMPLATES["en"]
     subject = template["subject"]
     body = template["body"].format(name=name)
 
@@ -213,9 +234,9 @@ def send_email(to_email, name, lang_code):
         server.login(SENDER_EMAIL, APP_PASSWORD)
         server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
         server.quit()
-        print(f"✅ Email sent to {to_email} in {lang_code}")
+        logging.info(f"✅ Email sent to {to_email} in {lang_code}")
     except Exception as e:
-        print("❌ Email send error:", e)
+        logging.error(f"❌ Email send error: {e}")
 
 if __name__ == "__main__":
     app.run(debug=True)
