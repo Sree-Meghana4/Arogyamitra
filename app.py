@@ -7,12 +7,12 @@ from deep_translator import GoogleTranslator
 import logging
 
 load_dotenv()
-
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "your_secret_key")
 
+# Configuration variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = "gemini-2.5-flash"
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
@@ -22,34 +22,30 @@ APP_PASSWORD = os.getenv("APP_PASSWORD")
 SYSTEM_PROMPT = {
     "role": "user",
     "parts": [{"text": (
-        "You are a multilingual medical assistant. Respond to symptoms and health concerns in this exact format.\n\n"
-        "If the user's input is vague, incomplete, or you need more information to make a better assessment, ask ONE relevant follow-up question as a doctor would, before giving your formatted response. If the user's input is clear and detailed, do NOT ask a follow-up question. Never ask more than one follow-up in a row.\n\n"
-        "The follow-up question should be in the user's language and should be specific (e.g., 'How long have you had this symptom?', 'Do you have a fever?', etc.).\n\n"
-        "Do not skip sections, and respond in the user's language. Each section should have exactly 2 lines, with 1 blank line between sections.\n"
-        "DO NOT use markdown formatting.\n\n"
-        "🛑 Omit the 'Nearby Help' section.\n\n"
+        "You are a multilingual medical assistant. Maintain conversation context across exchanges. "
+        "Use patient's symptom history from previous messages. Never repeat previously answered questions.\n\n"
         "FORMAT:\n\n"
         "🏪 Health Issue Classification:\n"
         "Line 1: Risk level - LOW / MEDIUM / HIGH / EMERGENCY.\n"
         "Line 2: If HIGH or EMERGENCY, say: ⚠ EMERGENCY. Visit a hospital immediately. An alert email has been sent.\n\n"
         "🧠 Description:\n"
-        "Line 1: Summarize their issue in plain terms.\n"
+        "Line 1: Summarize their issue with context from previous messages.\n"
         "Line 2: Mention the body system possibly affected.\n\n"
         "✅ Precautions:\n"
         "Line 1: A quick home remedy or first step.\n"
         "Line 2: A second practical precaution.\n\n"
         "💊 Medicines:\n"
-        "Line 1: Suggest OTC (over-the-counter) medicines like paracetamol, antacids, etc.\n"
-        "Line 2: Mention brand names if applicable, but remind to read dosage instructions carefully.\n\n"
-        "If the user just says 'hello', greet them kindly and do NOT use this format."
+        "Line 1: Suggest OTC medicines.\n"
+        "Line 2: Mention brand names if applicable.\n\n"
+        "If user says 'hello', greet them kindly without using this format."
     )}]
 }
+
 # Language-wise email templates
 EMAIL_TEMPLATES = {
     "en": {
         "subject": "Health Emergency Alert - HIGH Risk",
         "body": """Dear {name},
-
 Your issue is marked as HIGH risk.
 Please visit a hospital immediately.
 
@@ -61,7 +57,6 @@ TEAM AROGYAMITRA"""
     "hi": {
         "subject": "स्वास्थ्य आपातकालीन सूचना - उच्च जोखिम",
         "body": """प्रिय {name},
-
 आपकी समस्या को उच्च जोखिम के रूप में चिह्नित किया गया है।
 कृपया तुरंत अस्पताल जाएं।
 
@@ -73,7 +68,6 @@ TEAM AROGYAMITRA"""
     "te": {
         "subject": "ఆరోగ్య అత్యవసర హెచ్చరిక - హై రిస్క్",
         "body": """ప్రియమైన {name},
-
 మీ సమస్యను హై రిస్క్‌గా గుర్తించారు.
 దయచేసి వెంటనే ఆసుపత్రికి వెళ్లండి.
 
@@ -86,12 +80,6 @@ TEAM AROGYAMITRA"""
 
 @app.route('/')
 def root():
-    return redirect('/login')
-
-@app.route('/chat')
-def chat_page():
-    if 'user_email' in session:
-        return render_template('index.html', name=session.get('user_name'))
     return redirect('/login')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -118,10 +106,17 @@ def login():
         if user and check_password_hash(user['password'], password):
             session['user_email'] = email
             session['user_name'] = user['name']
+            session['conversation_history'] = []  # Initialize conversation history
             return redirect('/chat')
         else:
             return render_template('login.html', error="Invalid credentials")
     return render_template('login.html')
+
+@app.route('/chat')
+def chat_page():
+    if 'user_email' in session:
+        return render_template('index.html', name=session.get('user_name'))
+    return redirect('/login')
 
 @app.route('/logout')
 def logout():
@@ -140,10 +135,28 @@ def chat():
     if not user_message:
         return jsonify({"reply": "⚠️ Please type a message.", "reply_lang": lang_code})
 
-    reply = process_multilingual_query(user_message, lang_code)
+    # Initialize conversation history if missing
+    if 'conversation_history' not in session:
+        session['conversation_history'] = []
+
+    # Add user message to history
+    session['conversation_history'].append({"role": "user", "content": user_message})
+    session.modified = True
+
+    # Process query with full history
+    reply = process_multilingual_query(user_message, lang_code, session['conversation_history'])
+    
+    # Add bot response to history
+    session['conversation_history'].append({"role": "assistant", "content": reply})
+    session.modified = True
+    
+    # Enforce history length limit (last 4 exchanges)
+    if len(session['conversation_history']) > 8:
+        session['conversation_history'] = session['conversation_history'][-8:]
+
     reply_html = reply.replace("\n", "<br>")
 
-    # Improved emergency detection
+    # Emergency detection
     if ("Risk level - HIGH" in reply or "Risk level - EMERGENCY" in reply):
         send_email(session['user_email'], session['user_name'], lang_code)
 
@@ -160,24 +173,24 @@ def get_db():
     )''')
     return conn
 
-def process_multilingual_query(user_text, lang_code):
+def process_multilingual_query(user_text, lang_code, history):
     try:
         translated_query = GoogleTranslator(source=lang_code, target='en').translate(user_text)
     except:
         return "⚠️ Translation failed."
 
-    # Add a flag to the conversation to prevent repeated follow-ups
-    conversation = [{"role": "user", "content": translated_query}]
-    if session.get("last_bot_followup"):
-        conversation.append({"role": "system", "content": "The user has already been asked a follow-up question. Do not ask another. Provide your full formatted response now."})
-        session["last_bot_followup"] = False
+    # Build conversation context
+    conversation = [SYSTEM_PROMPT]
+    for exchange in history[:-1]:  # All except current message
+        conversation.append({
+            "role": "user" if exchange["role"] == "user" else "model",
+            "parts": [{"text": exchange["content"]}]
+        })
+    
+    # Add current query
+    conversation.append({"role": "user", "parts": [{"text": translated_query}]})
+    
     reply = ask_gemini(conversation)
-
-    # Detect if the bot is asking a follow-up
-    if "?" in reply and ("please provide" in reply.lower() or "can you tell" in reply.lower() or "more details" in reply.lower()):
-        session["last_bot_followup"] = True
-    else:
-        session["last_bot_followup"] = False
 
     try:
         translated_response = GoogleTranslator(source='en', target=lang_code).translate(reply)
@@ -191,13 +204,8 @@ def ask_gemini(conversation):
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY
     }
-    payload = {
-        "contents": [
-    SYSTEM_PROMPT
-     ] + [
-            {"role": msg.get("role", "user"), "parts": [{"text": msg.get("content", "")}]} for msg in conversation
-        ]
-    }
+    payload = {"contents": conversation}
+    
     try:
         response = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
@@ -207,7 +215,7 @@ def ask_gemini(conversation):
         if candidates:
             return candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "⚠️ No response from Gemini.")
     except Exception as e:
-        print("Gemini API error:", e)
+        logging.error(f"Gemini API error: {e}")
     return "⚠️ Gemini API failed."
 
 def send_email(to_email, name, lang_code):
@@ -215,11 +223,7 @@ def send_email(to_email, name, lang_code):
         logging.error("Email credentials not set.")
         return
 
-    logging.info(f"Requested email language: {lang_code}")
-    template = EMAIL_TEMPLATES.get(lang_code)
-    if not template:
-        logging.warning(f"No template for lang_code '{lang_code}', defaulting to English.")
-        template = EMAIL_TEMPLATES["en"]
+    template = EMAIL_TEMPLATES.get(lang_code, EMAIL_TEMPLATES["en"])
     subject = template["subject"]
     body = template["body"].format(name=name)
 
