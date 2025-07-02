@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,10 +15,8 @@
     </button>
   </div>
   <div class="app-container">
-    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-      <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar" tabindex="0">
-        <!-- Hamburger icon -->
+      <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="3" y1="6" x2="21" y2="6"></line>
           <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -32,69 +31,39 @@
       </div>
       <nav class="sidebar-nav">
         <ul>
-          <li>
-            <a href="/chat" class="nav-item active" tabindex="0">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              </svg>
-              <span class="nav-text">Home</span>
-            </a>
-          </li>
-          <li>
-            <a href="/logout" class="nav-item" tabindex="0">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16,17 21,12 16,7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-              </svg>
-              <span class="nav-text">Logout</span>
-            </a>
-          </li>
+          <li><a href="/chat" class="nav-item active">🏠 Home</a></li>
+          <li><a href="/logout" class="nav-item">🚪 Logout</a></li>
         </ul>
       </nav>
     </aside>
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
-    <!-- Chat UI -->
-    <main class="chat-area" role="main">
+    <main class="chat-area">
       <div class="chat-wrapper">
         <div class="chat-container">
-          <div id="chat-box" class="chat-content" aria-live="polite">
-            <div class="welcome-message">
-              <div class="welcome-icon">🩺</div>
-              <h2>Health AI Assistant</h2>
-              <p>How can I help you today? Ask me any health-related question.</p>
+          <div class="chat-content-wrapper">
+            <div id="chat-box" class="chat-content" aria-live="polite">
+              <div class="welcome-message">
+                <div class="welcome-icon">🩺</div>
+                <h2>Health AI Assistant</h2>
+                <p>How can I help you today? Ask me any health-related question.</p>
+              </div>
             </div>
           </div>
           <form class="chat-input-container" id="chat-form" autocomplete="off">
             <div class="input-wrapper" style="position:relative;">
-              <label for="lang-selector" class="visually-hidden">Select language</label>
-              <select id="lang-selector" title="Choose language" aria-label="Language selector">
-                <option value="en" lang="en">English</option>
-                <option value="hi" lang="hi">Hindi</option>
-                <option value="te" lang="te">Telugu</option>
-                <option value="ta" lang="ta">Tamil</option>
-                <option value="kn" lang="kn">Kannada</option>
-                <option value="ml" lang="ml">Malayalam</option>
-                <option value="bn" lang="bn">Bengali</option>
-                <option value="mr" lang="mr">Marathi</option>
-                <option value="ur" lang="ur">Urdu</option>
-                <option value="gu" lang="gu">Gujarati</option>
+              <select id="lang-selector">
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="te">Telugu</option>
               </select>
-              <input type="text" id="user-input" placeholder="Ask your health question..." aria-label="User input" required autocomplete="off" />
-              <button type="button" id="clear-voice-btn" aria-label="Clear input">&times;</button>
-              <button type="button" id="mic-btn" aria-label="Voice input" tabindex="0">🎤</button>
-              <button type="button" id="stop-voice-btn" aria-label="Stop voice input" style="display:none;">⏹️</button>
-              <button id="send-btn" type="submit" aria-label="Send" tabindex="0">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="22" y1="2" x2="11" y2="13"></line>
-                  <polygon points="22,2 15,22 11,13 2,9 22,2"></polygon>
-                </svg>
-              </button>
+              <input type="text" id="user-input" placeholder="Ask your health question..." required autocomplete="off" />
+              <button type="button" id="clear-voice-btn">✖</button>
+              <button type="button" id="mic-btn">🎤</button>
+              <button type="button" id="stop-voice-btn" style="display:none;">⏹️</button>
+              <button id="send-btn" type="submit">➤</button>
             </div>
             <div class="input-error" id="input-error"></div>
-            <div class="input-footer">
-              <span>Powered by Gemini &amp; LibreTranslate</span>
-            </div>
+            <div class="input-footer"><span>Powered by Gemini & LibreTranslate</span></div>
           </form>
         </div>
       </div>

@@ -12,36 +12,37 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "your_secret_key")
 
-# Configuration variables
+# Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = "gemini-2.5-flash"
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 APP_PASSWORD = os.getenv("APP_PASSWORD")
 
-# System prompt for Gemini
+# Updated system prompt for conversational behavior
 SYSTEM_PROMPT = {
     "role": "user",
-    "parts": [{"text": (
-        "You are a multilingual medical assistant. Maintain conversation context across exchanges. "
-        "Use patient's symptom history from previous messages. Never repeat previously answered questions.\n\n"
-        "FORMAT:\n\n"
-        "🏪 Health Issue Classification:\n"
-        "Line 1: Risk level - LOW / MEDIUM / HIGH / EMERGENCY.\n"
-        "Line 2: If HIGH or EMERGENCY, say: ⚠ EMERGENCY. Visit a hospital immediately. An alert email has been sent.\n\n"
-        "🧠 Description:\n"
-        "Line 1: Summarize their issue with context from previous messages.\n"
-        "Line 2: Mention the body system possibly affected.\n\n"
-        "✅ Precautions:\n"
-        "Line 1: A quick home remedy or first step.\n"
-        "Line 2: A second practical precaution.\n\n"
-        "💊 Medicines:\n"
-        "Line 1: Suggest OTC medicines.\n"
-        "Line 2: Mention brand names if applicable.\n\n"
-        "If user says 'hello', greet them kindly without using this format."
-    )}]
+    "parts": [{
+        "text": (
+            "You are a highly intelligent, empathetic medical assistant chatbot talking one-on-one with a patient.\n"
+            "Your goal is to understand the user's symptoms by asking at least three relevant follow-up questions before you give any medical conclusion.\n\n"
+            "After you have received clear answers to at least three questions, you can give a structured response in this format **without saying 'Line 1', 'Line 2', or using asterisks**:\n\n"
+            "🏪 Health Issue Classification:\n"
+            "Risk level - LOW / MEDIUM / HIGH / EMERGENCY.\n"
+            "If HIGH or EMERGENCY, also say: ⚠ EMERGENCY. Visit a hospital immediately. An alert email has been sent.\n\n"
+            "🧠 Description:\n"
+            "Summarize the user's condition in simple language, considering their answers and history.\n"
+            "Mention which part or system of the body is affected.\n\n"
+            "✅ Precautions:\n"
+            "Give one or two home remedies, safety measures, or practical actions they can take immediately.\n\n"
+            "💊 Medicines:\n"
+            "If possible, suggest over-the-counter (OTC) medicines and mention popular brand names.\n\n"
+            "Until enough information is available, do not give any diagnosis or full-format response. Just continue asking short, polite, and relevant questions like a real doctor.\n"
+            "Use simple, supportive, and conversational language. Never include placeholder words like 'Line 1', 'Line 2', or '*'.\n"
+            "Avoid medical jargon. Keep it human-like and friendly. Do not repeat or summarize user messages."
+        )
+    }]
 }
 
-# Language-wise email templates
 EMAIL_TEMPLATES = {
     "en": {
         "subject": "Health Emergency Alert - HIGH Risk",
@@ -106,7 +107,7 @@ def login():
         if user and check_password_hash(user['password'], password):
             session['user_email'] = email
             session['user_name'] = user['name']
-            session['conversation_history'] = []  # Initialize conversation history
+            session['conversation_history'] = []
             return redirect('/chat')
         else:
             return render_template('login.html', error="Invalid credentials")
@@ -115,6 +116,7 @@ def login():
 @app.route('/chat')
 def chat_page():
     if 'user_email' in session:
+        session['conversation_history'] = []
         return render_template('index.html', name=session.get('user_name'))
     return redirect('/login')
 
@@ -135,28 +137,22 @@ def chat():
     if not user_message:
         return jsonify({"reply": "⚠️ Please type a message.", "reply_lang": lang_code})
 
-    # Initialize conversation history if missing
     if 'conversation_history' not in session:
         session['conversation_history'] = []
 
-    # Add user message to history
     session['conversation_history'].append({"role": "user", "content": user_message})
     session.modified = True
 
-    # Process query with full history
     reply = process_multilingual_query(user_message, lang_code, session['conversation_history'])
-    
-    # Add bot response to history
+
     session['conversation_history'].append({"role": "assistant", "content": reply})
     session.modified = True
-    
-    # Enforce history length limit (last 4 exchanges)
+
     if len(session['conversation_history']) > 8:
         session['conversation_history'] = session['conversation_history'][-8:]
 
     reply_html = reply.replace("\n", "<br>")
 
-    # Emergency detection
     if ("Risk level - HIGH" in reply or "Risk level - EMERGENCY" in reply):
         send_email(session['user_email'], session['user_name'], lang_code)
 
@@ -179,17 +175,15 @@ def process_multilingual_query(user_text, lang_code, history):
     except:
         return "⚠️ Translation failed."
 
-    # Build conversation context
     conversation = [SYSTEM_PROMPT]
-    for exchange in history[:-1]:  # All except current message
+    for exchange in history[:-1]:
         conversation.append({
             "role": "user" if exchange["role"] == "user" else "model",
             "parts": [{"text": exchange["content"]}]
         })
-    
-    # Add current query
+
     conversation.append({"role": "user", "parts": [{"text": translated_query}]})
-    
+
     reply = ask_gemini(conversation)
 
     try:
@@ -205,7 +199,7 @@ def ask_gemini(conversation):
         "x-goog-api-key": GEMINI_API_KEY
     }
     payload = {"contents": conversation}
-    
+
     try:
         response = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
