@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
+from gtts import gTTS
 import logging
 import re
 
@@ -19,31 +20,7 @@ GEMINI_MODEL = "gemini-2.5-flash"
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 APP_PASSWORD = os.getenv("APP_PASSWORD")
 
-# Updated system prompt for conversational behavior
-SYSTEM_PROMPT = {
-    "role": "user",
-    "parts": [{
-        "text": (
-            "You are a highly intelligent, empathetic medical assistant chatbot talking one-on-one with a patient.\n"
-            "Your goal is to understand the user's symptoms by asking at least three relevant follow-up questions before you give any medical conclusion.\n\n"
-            "After you have received clear answers to at least three questions, you can give a structured response in this format **without saying 'Line 1', 'Line 2', or using asterisks**:\n\n"
-            "🏪 Health Issue Classification:\n"
-            "Risk level - LOW / MEDIUM / HIGH / EMERGENCY.\n"
-            "If HIGH or EMERGENCY, also say: ⚠ EMERGENCY. Visit a hospital immediately. An alert email has been sent.\n\n"
-            "🧠 Description:\n"
-            "Summarize the user's condition in simple language, considering their answers and history.\n"
-            "Mention which part or system of the body is affected.\n\n"
-            "✅ Precautions:\n"
-            "Give one or two home remedies, safety measures, or practical actions they can take immediately.\n\n"
-            "💊 Medicines:\n"
-            "If possible, suggest over-the-counter (OTC) medicines and mention popular brand names.\n\n"
-            "Until enough information is available, do not give any diagnosis or full-format response. Just continue asking short, polite, and relevant questions like a real doctor.\n"
-            "Use simple, supportive, and conversational language. Never include placeholder words like 'Line 1', 'Line 2', or '*'.\n"
-            "Avoid medical jargon. Keep it human-like and friendly. Do not repeat or summarize user messages."
-        )
-    }]
-}
-
+# Email templates
 EMAIL_TEMPLATES = {
     "en": {
         "subject": "Health Emergency Alert - HIGH Risk",
@@ -80,6 +57,31 @@ TEAM AROGYAMITRA"""
     }
 }
 
+# System prompt for Gemini
+SYSTEM_PROMPT = {
+    "role": "user",
+    "parts": [{
+        "text": (
+            "You are a highly intelligent, empathetic medical assistant chatbot talking one-on-one with a patient.\n"
+            "Your goal is to understand the user's symptoms by asking at least three relevant follow-up questions before you give any medical conclusion.\n\n"
+            "After you have received clear answers to at least three questions, you can give a structured response in this format:\n\n"
+            "🏪 Health Issue Classification:\n"
+            "Risk level - LOW / MEDIUM / HIGH / EMERGENCY.\n"
+            "If HIGH or EMERGENCY, also say: ⚠ EMERGENCY. Visit a hospital immediately. An alert email has been sent.\n\n"
+            "🧠 Description:\n"
+            "Summarize the user's condition in simple language, considering their answers and history.\n"
+            "Mention which part or system of the body is affected.\n\n"
+            "✅ Precautions:\n"
+            "Give one or two home remedies, safety measures, or practical actions they can take immediately.\n\n"
+            "💊 Medicines:\n"
+            "If possible, suggest over-the-counter (OTC) medicines and mention popular brand names.\n\n"
+            "Until enough information is available, do not give any diagnosis or full-format response. Just continue asking short, polite, and relevant questions like a real doctor.\n"
+            "Use simple, supportive, and conversational language. Never include placeholder words like 'Line 1', 'Line 2', or '*'.\n"
+            "Avoid medical jargon. Keep it human-like and friendly. Do not repeat or summarize user messages."
+        )
+    }]
+}
+
 @app.route('/')
 def root():
     return redirect('/login')
@@ -114,16 +116,16 @@ def login():
             return render_template('login.html', error="Invalid credentials")
     return render_template('login.html')
 
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
+
 @app.route('/chat')
 def chat_page():
     if 'user_email' in session:
         session['conversation_history'] = []
         return render_template('index.html', name=session.get('user_name'))
-    return redirect('/login')
-
-@app.route('/logout')
-def logout():
-    session.clear()
     return redirect('/login')
 
 @app.route("/api/chat", methods=["POST"])
@@ -144,35 +146,27 @@ def chat():
     session['conversation_history'].append({"role": "user", "content": user_message})
     session.modified = True
 
-    reply_en, reply = process_multilingual_query(user_message, lang_code, session['conversation_history'])
-
-    session['conversation_history'].append({"role": "assistant", "content": reply})
+    reply_en, reply_translated = process_multilingual_query(user_message, lang_code, session['conversation_history'])
+    session['conversation_history'].append({"role": "assistant", "content": reply_en})
     session.modified = True
 
     if len(session['conversation_history']) > 8:
         session['conversation_history'] = session['conversation_history'][-8:]
 
-    reply_html = reply.replace("\n", "<br>")
+    reply_html = reply_translated.replace("\n", "<br>")
 
+    # Generate voice
+    voice_success = generate_speech(reply_translated, lang_code)
+
+    # Email alert
     if ("Risk level - HIGH" in reply_en or "Risk level - EMERGENCY" in reply_en):
         send_email(session['user_email'], session['user_name'], lang_code)
 
-    return jsonify({"reply": reply_html, "reply_lang": lang_code})
-
-def get_db():
-    conn = sqlite3.connect('users.db')
-    conn.row_factory = sqlite3.Row
-    conn.execute('''CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        email TEXT UNIQUE,
-        password TEXT
-    )''')
-    return conn
-
-def remove_repeated_words(text):
-    # Remove repeated consecutive words (case-insensitive, works for most languages)
-    return re.sub(r'\b(\w+)( \1\b)+', r'\1', text, flags=re.IGNORECASE)
+    return jsonify({
+        "reply": reply_html,
+        "reply_lang": lang_code,
+        "voice_available": voice_success
+    })
 
 def process_multilingual_query(user_text, lang_code, history):
     try:
@@ -188,7 +182,6 @@ def process_multilingual_query(user_text, lang_code, history):
         })
 
     conversation.append({"role": "user", "parts": [{"text": translated_query}]})
-
     reply = ask_gemini(conversation)
 
     try:
@@ -207,7 +200,6 @@ def ask_gemini(conversation):
         "x-goog-api-key": GEMINI_API_KEY
     }
     payload = {"contents": conversation}
-
     try:
         response = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
@@ -219,6 +211,18 @@ def ask_gemini(conversation):
     except Exception as e:
         logging.error(f"Gemini API error: {e}")
     return "⚠️ Gemini API failed."
+
+def generate_speech(text, lang_code='en'):
+    try:
+        tts = gTTS(text=text, lang=lang_code)
+        tts.save(os.path.join("static", "response.mp3"))
+        return True
+    except Exception as e:
+        logging.error(f"TTS generation failed: {e}")
+        return False
+
+def remove_repeated_words(text):
+    return re.sub(r'\b(\w+)( \1\b)+', r'\1', text, flags=re.IGNORECASE)
 
 def send_email(to_email, name, lang_code):
     logging.info(f"[DEBUG] send_email called for {to_email} with lang_code={lang_code}")
@@ -244,6 +248,18 @@ def send_email(to_email, name, lang_code):
         logging.info(f"✅ Email sent to {to_email} in {lang_code}")
     except Exception as e:
         logging.error(f"❌ Email send error: {e}")
+
+# ✅ Fix: Added get_db() function
+def get_db():
+    conn = sqlite3.connect('users.db')
+    conn.row_factory = sqlite3.Row
+    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        email TEXT UNIQUE,
+        password TEXT
+    )''')
+    return conn
 
 if __name__ == "__main__":
     app.run(debug=True)
