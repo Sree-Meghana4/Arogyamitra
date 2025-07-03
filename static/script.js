@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const inputWrapper = userInput.parentElement;
   const inputError = document.getElementById('input-error');
   const refreshBtn = document.getElementById('refresh-chat-btn');
+  const scrollBtn = document.getElementById('scroll-bottom-btn'); // 🔹 added
   let recognition = null;
   let isListening = false;
 
@@ -225,4 +226,19 @@ document.addEventListener('DOMContentLoaded', () => {
       sendBtn.click();
     }
   });
+
+  // 🔽 Scroll Button Logic
+  chatBox.addEventListener('scroll', () => {
+    const isAtBottom = chatBox.scrollHeight - chatBox.scrollTop <= chatBox.clientHeight + 50;
+    if (scrollBtn) scrollBtn.style.display = isAtBottom ? 'none' : 'flex';
+  });
+
+  if (scrollBtn) {
+    scrollBtn.addEventListener('click', () => {
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+  }
+
+  // Scroll to bottom on initial load
+  scrollToBottom();
 });
