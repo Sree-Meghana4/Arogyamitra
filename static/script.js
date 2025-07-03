@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     welcome.className = 'welcome-message';
     welcome.innerHTML = `
       <div class="welcome-icon">🤖</div>
-      <h2>Health AI Assistant</h2>
+      <h2>AROGYAMITRA🩺</h2>
       <p>How can I help you today? Ask me any health-related question.</p>
     `;
     chatBox.appendChild(welcome);
