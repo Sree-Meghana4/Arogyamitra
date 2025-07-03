@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
 import logging
+import re
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -143,7 +144,7 @@ def chat():
     session['conversation_history'].append({"role": "user", "content": user_message})
     session.modified = True
 
-    reply = process_multilingual_query(user_message, lang_code, session['conversation_history'])
+    reply_en, reply = process_multilingual_query(user_message, lang_code, session['conversation_history'])
 
     session['conversation_history'].append({"role": "assistant", "content": reply})
     session.modified = True
@@ -153,7 +154,7 @@ def chat():
 
     reply_html = reply.replace("\n", "<br>")
 
-    if ("Risk level - HIGH" in reply or "Risk level - EMERGENCY" in reply):
+    if ("Risk level - HIGH" in reply_en or "Risk level - EMERGENCY" in reply_en):
         send_email(session['user_email'], session['user_name'], lang_code)
 
     return jsonify({"reply": reply_html, "reply_lang": lang_code})
@@ -169,11 +170,15 @@ def get_db():
     )''')
     return conn
 
+def remove_repeated_words(text):
+    # Remove repeated consecutive words (case-insensitive, works for most languages)
+    return re.sub(r'\b(\w+)( \1\b)+', r'\1', text, flags=re.IGNORECASE)
+
 def process_multilingual_query(user_text, lang_code, history):
     try:
         translated_query = GoogleTranslator(source=lang_code, target='en').translate(user_text)
     except:
-        return "⚠️ Translation failed."
+        return ("⚠️ Translation failed.", "⚠️ Translation failed.")
 
     conversation = [SYSTEM_PROMPT]
     for exchange in history[:-1]:
@@ -191,7 +196,10 @@ def process_multilingual_query(user_text, lang_code, history):
     except:
         translated_response = reply
 
-    return translated_response
+    if lang_code != 'en':
+        translated_response = remove_repeated_words(translated_response)
+
+    return reply, translated_response
 
 def ask_gemini(conversation):
     headers = {
@@ -213,6 +221,7 @@ def ask_gemini(conversation):
     return "⚠️ Gemini API failed."
 
 def send_email(to_email, name, lang_code):
+    logging.info(f"[DEBUG] send_email called for {to_email} with lang_code={lang_code}")
     if not SENDER_EMAIL or not APP_PASSWORD:
         logging.error("Email credentials not set.")
         return

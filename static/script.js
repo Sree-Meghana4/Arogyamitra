@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const clearBtn = document.getElementById('clear-voice-btn');
   const inputWrapper = userInput.parentElement;
   const inputError = document.getElementById('input-error');
+  const refreshBtn = document.getElementById('refresh-chat-btn');
   let recognition = null;
   let isListening = false;
 
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
       userInput.disabled = false;
       micBtn.disabled = false;
       sendBtn.disabled = false;
+      userInput.focus();
 
     } catch (err) {
       removeTyping();
@@ -50,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
       userInput.disabled = false;
       micBtn.disabled = false;
       sendBtn.disabled = false;
+      userInput.focus();
     }
   });
 
@@ -111,6 +114,19 @@ document.addEventListener('DOMContentLoaded', () => {
       setMicInactive();
       stopBtn.style.display = 'none';
     }
+  });
+
+  refreshBtn.addEventListener('click', () => {
+    chatBox.innerHTML = '';
+    const welcome = document.createElement('div');
+    welcome.className = 'welcome-message';
+    welcome.innerHTML = `
+      <div class="welcome-icon">🤖</div>
+      <h2>Health AI Assistant</h2>
+      <p>How can I help you today? Ask me any health-related question.</p>
+    `;
+    chatBox.appendChild(welcome);
+    scrollToBottom();
   });
 
   function setMicActive() {
@@ -190,10 +206,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function mapLangToLocale(lang) {
     const locales = {
-      "en": "en-IN", "hi": "hi-IN", "te": "te-IN",
-      "ta": "ta-IN", "kn": "kn-IN", "ml": "ml-IN",
-      "bn": "bn-IN", "mr": "mr-IN", "ur": "ur-IN",
-      "gu": "gu-IN"
+      "en": "en-IN",
+      "hi": "hi-IN",
+      "te": "te-IN"
     };
     return locales[lang] || 'en-IN';
   }

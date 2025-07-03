@@ -9,41 +9,28 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="theme-toggle-fixed">
-    <button id="theme-toggle" aria-label="Switch to dark mode" class="theme-toggle">
-      <span id="theme-toggle-icon">🌙</span>
-    </button>
-  </div>
   <div class="app-container">
-    <aside class="sidebar" id="sidebar">
-      <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
-        </svg>
-      </button>
-      <div class="sidebar-header">
-        <div class="sidebar-title">
-          <span class="sidebar-logo">🩺</span>
-          <span class="sidebar-text">Health AI</span>
+    <nav class="top-nav">
+      <div class="top-nav-content">
+        <span class="sidebar-logo">🤖</span>
+        <span class="sidebar-text">Health AI</span>
+        <div class="top-nav-links">
+          <button onclick="window.location.href='/chat'" class="nav-item active">🏠 Home</button>
+          <button onclick="window.location.href='/logout'" class="nav-item">🔒 Logout</button>
+          <button type="button" id="refresh-chat-btn" title="Refresh Chat" class="top-nav-refresh">🔄</button>
         </div>
+        <button id="theme-toggle" aria-label="Switch to dark mode" class="theme-toggle">
+          <span id="theme-toggle-icon">🌙</span>
+        </button>
       </div>
-      <nav class="sidebar-nav">
-        <ul>
-          <li><a href="/chat" class="nav-item active">🏠 Home</a></li>
-          <li><a href="/logout" class="nav-item">🚪 Logout</a></li>
-        </ul>
-      </nav>
-    </aside>
-    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    </nav>
     <main class="chat-area">
       <div class="chat-wrapper">
         <div class="chat-container">
           <div class="chat-content-wrapper">
             <div id="chat-box" class="chat-content" aria-live="polite">
               <div class="welcome-message">
-                <div class="welcome-icon">🩺</div>
+                <div class="welcome-icon">🤖</div>
                 <h2>Health AI Assistant</h2>
                 <p>How can I help you today? Ask me any health-related question.</p>
               </div>
