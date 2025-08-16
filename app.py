@@ -8,6 +8,7 @@ from gtts import gTTS
 import logging
 import re
 
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
